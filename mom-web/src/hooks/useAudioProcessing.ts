@@ -98,89 +98,87 @@ export const useAudioProcessing = () => {
     formData.append("audio", file);
 
     try {
-      const url = model === "whisper" 
-        ? "http://localhost:8000/api/upload/whisper" 
-        : "http://localhost:8000/api/upload";
-
-      const response = await fetch(url, {
-        method: "POST",
-        body: formData,
-      });
-
       if (model === "whisper") {
-        if (!response.ok) throw new Error("Upload failed");
-        if (!response.body) throw new Error("No response body");
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = "";
-
-        setStatus("processing");
-        setStatusMessage("Transcribing...");
-        setTranscript("");
-
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value, { stream: true });
-          console.log("Received chunk:", chunk); // Debug log
-          buffer += chunk;
-          
-          const lines = buffer.split("\n\n");
-          buffer = lines.pop() || ""; // Keep the last partial line in buffer
-          
-          for (const line of lines) {
-            const trimmedLine = line.trim();
-            if (trimmedLine.startsWith("data: ")) {
-              const jsonStr = trimmedLine.replace("data: ", "").trim();
-              if (jsonStr === "[DONE]" || jsonStr.includes('"type":"done"')) break;
-              
-              try {
-                const data = JSON.parse(jsonStr);
-                if (data.type === "segment") {
-                  // Use functional update to ensure we don't lose previous state
-                  setTranscript(prev => prev + data.text + " ");
-                } else if (data.type === "meta") {
-                   setStatusMessage(`Transcribing (${data.language})...`);
-                }
-              } catch (e) {
-                console.error("SSE Parse Error", e);
-              }
-            }
-          }
-        }
-        
-        setStatus("completed");
-        setStatusMessage("Transcription Complete!");
-        setProgress(100);
-        return;
-      }
-
-      const data = await response.json();
-
-      if (response.ok) {
-        if (data.transcriptId) {
-           // Polling (Gemini)
-           setStatus("processing");
-           setStatusMessage("File uploaded. Processing audio...");
-           setProgress(30);
-           checkTranscriptionStatus(data.transcriptId);
-        } else {
-           setStatus("error");
-           setStatusMessage(data.message || "Upload failed");
-           setProgress(0);
-        }
+        await handleWhisperUpload(formData);
       } else {
-        setStatus("error");
-        setStatusMessage(data.message || "Upload failed");
-        setProgress(0);
+        await handleGeminiUpload(formData);
       }
     } catch (error) {
       console.error("Error uploading file:", error);
       setStatus("error");
       setStatusMessage(`Upload error: ${error instanceof Error ? error.message : "Unknown error"}`);
       setProgress(0);
+    }
+  };
+
+  const handleGeminiUpload = async (formData: FormData) => {
+    const response = await fetch("http://localhost:8000/api/upload", {
+      method: "POST",
+      body: formData,
+    });
+
+    const data = await response.json();
+
+    if (response.ok && data.transcriptId) {
+      setStatus("processing");
+      setStatusMessage("File uploaded. Processing audio with Gemini...");
+      setProgress(30);
+      checkTranscriptionStatus(data.transcriptId);
+    } else {
+      throw new Error(data.message || "Upload failed");
+    }
+  };
+
+  const handleWhisperUpload = async (formData: FormData) => {
+    const response = await fetch("http://localhost:8000/api/upload/whisper", {
+      method: "POST",
+      body: formData,
+    });
+
+    if (!response.ok) throw new Error("Upload failed");
+    if (!response.body) throw new Error("No response body");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    setStatus("processing");
+    setStatusMessage("Transcribing with Whisper...");
+    setTranscript("");
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      const chunk = decoder.decode(value, { stream: true });
+      buffer += chunk;
+      
+      const lines = buffer.split("\n\n");
+      buffer = lines.pop() || ""; // Keep the last partial line in buffer
+      
+      for (const line of lines) {
+        const trimmedLine = line.trim();
+        if (trimmedLine.startsWith("data: ")) {
+          const jsonStr = trimmedLine.replace("data: ", "").trim();
+          if (jsonStr === "[DONE]" || jsonStr.includes('"type":"done"')) {
+            setStatus("completed");
+            setStatusMessage("Transcription Complete!");
+            setProgress(100);
+            return;
+          }
+          
+          try {
+            const data = JSON.parse(jsonStr);
+            if (data.type === "segment") {
+              setTranscript(prev => prev + data.text + " ");
+            } else if (data.type === "meta") {
+                setStatusMessage(`Transcribing (${data.language})...`);
+            }
+          } catch (e) {
+            // Silent fail for partial JSON
+          }
+        }
+      }
     }
   };
 

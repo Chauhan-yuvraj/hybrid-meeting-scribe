@@ -6,6 +6,8 @@ import FileUploader from "../components/FileUploader";
 import StatusCard from "../components/StatusCard";
 import ResultCard from "../components/ResultCard";
 import { useAudioProcessing } from "../hooks/useAudioProcessing";
+import { ModelSelector } from "../components/ModelSelector";
+import { cn } from "../lib/utils";
 
 function Home() {
   const {
@@ -30,50 +32,45 @@ function Home() {
 
   const isProcessing = status === "uploading" || status === "processing";
   const hasResult = status === "completed";
+  const isIncognito = model === "whisper";
 
   return (
-    <Layout>
-      <Header />
+    <Layout mode={isIncognito ? "incognito" : "light"}>
+      <Header isIncognito={isIncognito} />
 
       {/* Main Control Card */}
-      <div className="w-full max-w-2xl bg-white/80 backdrop-blur-xl rounded-3xl p-6 md:p-8 shadow-2xl shadow-indigo-100/50 border border-white/50 ring-1 ring-slate-100">
+      <div className={cn(
+        "w-full h-full max-w-2xl rounded-3xl p-6 md:p-8 shadow-2xl border transition-all duration-500",
+        isIncognito 
+          ? "glass-dark border-emerald-900/30 shadow-[0_0_50px_-10px_rgba(16,185,129,0.1)]" 
+          : "glass border-white/40 shadow-xl shadow-indigo-500/10"
+      )}>
         <div className="flex flex-col gap-8">
           
           <div className="space-y-4">
-            <div className="flex gap-2 justify-center pb-2">
-              <button
-                onClick={() => setModel("gemini")}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                  model === "gemini"
-                    ? "bg-violet-100 text-violet-700 ring-1 ring-violet-200"
-                    : "text-slate-500 hover:bg-slate-50"
-                }`}
-              >
-                Gemini 2.0 Flash
-              </button>
-              <button
-                onClick={() => setModel("whisper")}
-                className={`px-4 py-2 rounded-full text-sm font-medium transition-all ${
-                  model === "whisper"
-                    ? "bg-violet-100 text-violet-700 ring-1 ring-violet-200"
-                    : "text-slate-500 hover:bg-slate-50"
-                }`}
-              >
-                OpenAI Whisper
-              </button>
-            </div>
+            <ModelSelector 
+              model={model} 
+              setModel={setModel} 
+              disabled={isProcessing} 
+            />
 
             <FileUploader 
               file={file} 
               onFileSelect={(f) => setFile(f)} 
-              disabled={isProcessing} 
+              disabled={isProcessing}
+              isIncognito={isIncognito}
             />
 
             <div className="flex flex-col sm:flex-row gap-3 pt-2">
               <Button
                 onClick={uploadFile}
                 disabled={!file || isProcessing || hasResult}
-                className="flex-1 h-12 text-base"
+                className={cn(
+                  "flex-1 h-12 text-base transition-all duration-300 shadow-lg",
+                  isIncognito 
+                    ? "bg-emerald-600 hover:bg-emerald-500 text-white shadow-emerald-900/20 hover:shadow-emerald-500/30" 
+                    : "shadow-indigo-500/20 hover:shadow-indigo-500/40"
+                )}
               >
                 {status === "idle" || status === "error" 
                   ? "Start Transcription" 
@@ -84,7 +81,10 @@ function Home() {
                 <Button
                   variant="secondary"
                   onClick={resetState}
-                  className="h-12"
+                  className={cn(
+                    "h-12",
+                    isIncognito ? "bg-slate-800 text-slate-300 hover:bg-slate-700 border-slate-700" : ""
+                  )}
                 >
                   <RefreshCw className="w-4 h-4 mr-2" />
                   Reset
@@ -96,7 +96,8 @@ function Home() {
           <StatusCard 
             status={status} 
             progress={progress} 
-            message={statusMessage} 
+            message={statusMessage}
+            isIncognito={isIncognito}
           />
         </div>
       </div>
@@ -109,12 +110,18 @@ function Home() {
             type="transcript"
             content={transcript}
             onCopy={() => handleCopy(transcript)}
+            isIncognito={isIncognito}
             actionButton={
               <Button
                 onClick={generateMOM}
                 isLoading={momStatus === "loading"}
                 disabled={momStatus === "loading" || !!momResult || status !== "completed"}
-                className="bg-violet-600 hover:bg-violet-700 h-9 text-xs"
+                className={cn(
+                  "h-9 text-xs shadow-md",
+                  isIncognito 
+                    ? "bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/20" 
+                    : "bg-violet-600 hover:bg-violet-700 shadow-violet-500/20"
+                )}
               >
                 {!momStatus && <Sparkles className="w-3.5 h-3.5 mr-1.5" />}
                 Generate MOM
@@ -129,6 +136,7 @@ function Home() {
             type="mom"
             content={momResult}
             onCopy={() => handleCopy(momResult)}
+            isIncognito={isIncognito}
           />
         )}
       </div>
